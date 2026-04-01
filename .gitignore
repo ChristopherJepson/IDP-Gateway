@@ -1,0 +1,11 @@
+# Ignore the temporary upload directory
+temp/
+
+# Ignore any text or audio files we use for local testing
+*.txt
+*.mp3
+*.wav
+
+# Ignore the compiled Go binary (Windows and Linux versions)
+api-gateway
+api-gateway.exe

@@ -1,7 +1,7 @@
 # 1. THE BASE IMAGE
 # We start with "Alpine" Linux. It is an ultra-secure, stripped-down version of Linux 
 # that is only 5MB in size. We use the version that already has Go installed.
-FROM golang:1.22-alpine
+FROM golang:alpine
 
 # 2. INSTALL DEPENDENCIES
 # Alpine uses 'apk' instead of 'apt' to install software. 

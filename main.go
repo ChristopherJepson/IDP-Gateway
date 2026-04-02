@@ -10,7 +10,6 @@ import (
 	"strings"
 )
 
-// NEW LOGIC: The Security Middleware
 func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// 1. Tell the browser: "I explicitly allow requests from any origin"
@@ -31,8 +30,6 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 		next(w, r)
 	}
 }
-
-// ... (imports remain the same)
 
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	enableCORS(func(w http.ResponseWriter, r *http.Request) {
@@ -83,7 +80,55 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
-// ... (rest of main.go)
+func uploadVideoHandler(w http.ResponseWriter, r *http.Request) {
+	enableCORS(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed.", http.StatusMethodNotAllowed)
+			return
+		}
+
+		// Set the limit to 100 MB
+		const maxVideoSize = 100 << 20
+		err := r.ParseMultipartForm(maxVideoSize)
+		if err != nil {
+			http.Error(w, "File too large. Max limit is 100MB.", http.StatusRequestEntityTooLarge)
+			return
+		}
+
+		targetFormat := r.FormValue("targetFormat")
+		file, header, err := r.FormFile("videoFile")
+		if err != nil {
+			http.Error(w, "Error retrieving file", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
+
+		inputPath := filepath.Join("temp", header.Filename)
+		dst, _ := os.Create(inputPath)
+		io.Copy(dst, file)
+		dst.Close()
+
+		fileNameWithoutExt := strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
+		outputFilename := fileNameWithoutExt + "." + targetFormat
+		outputPath := filepath.Join("temp", outputFilename)
+
+		fmt.Printf("Converting Video: %s to %s...\n", header.Filename, targetFormat)
+
+		// FFmpeg Video Command
+		// -preset ultrafast: Prioritizes speed over file size (important for responsiveness)
+		cmd := exec.Command("ffmpeg", "-y", "-i", inputPath, "-preset", "ultrafast", outputPath)
+
+		err = cmd.Run()
+		if err != nil {
+			fmt.Printf("Video Conversion Error: %v\n", err)
+			http.Error(w, "Video conversion failed.", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"filename": "%s"}`, outputFilename)
+	})(w, r)
+}
 
 func main() {
 	os.MkdirAll("temp", os.ModePerm)

@@ -32,45 +32,58 @@ func enableCORS(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// ... (imports remain the same)
+
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "POST" {
-		http.Error(w, "Method not allowed.", http.StatusMethodNotAllowed)
-		return
-	}
-	r.ParseMultipartForm(10 << 20)
+	enableCORS(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "Method not allowed.", http.StatusMethodNotAllowed)
+			return
+		}
 
-	file, header, err := r.FormFile("audioFile")
-	if err != nil {
-		http.Error(w, "Error retrieving file", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
+		// 1. Get the target format from the form (default to mp3 if missing)
+		targetFormat := r.FormValue("targetFormat")
+		if targetFormat == "" {
+			targetFormat = "mp3"
+		}
 
-	inputPath := filepath.Join("temp", header.Filename)
-	dst, _ := os.Create(inputPath)
-	io.Copy(dst, file)
-	dst.Close()
+		r.ParseMultipartForm(25 << 20) // Increased to 25MB for larger WAV files
 
-	fileNameWithoutExt := strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
-	outputPath := filepath.Join("temp", fileNameWithoutExt+".mp3")
+		file, header, err := r.FormFile("audioFile")
+		if err != nil {
+			http.Error(w, "Error retrieving file", http.StatusBadRequest)
+			return
+		}
+		defer file.Close()
 
-	fmt.Printf("Starting conversion for: %s...\n", header.Filename)
-	cmd := exec.Command("ffmpeg", "-y", "-i", inputPath, outputPath)
+		inputPath := filepath.Join("temp", header.Filename)
+		dst, _ := os.Create(inputPath)
+		io.Copy(dst, file)
+		dst.Close()
 
-	err = cmd.Run()
-	if err != nil {
-		fmt.Printf("FFmpeg Error: %v\n", err)
-		http.Error(w, "Failed to convert file.", http.StatusInternalServerError)
-		return
-	}
+		// 2. Use the user's chosen target format for the output path
+		fileNameWithoutExt := strings.TrimSuffix(header.Filename, filepath.Ext(header.Filename))
+		outputFilename := fileNameWithoutExt + "." + targetFormat
+		outputPath := filepath.Join("temp", outputFilename)
 
-	fmt.Printf("Success! Converted file saved to: %s\n", outputPath)
+		fmt.Printf("Converting %s to %s...\n", header.Filename, targetFormat)
 
-	// Since we are talking to a React API now instead of a raw HTML page,
-	// we just need to send a simple success code back.
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, "Converted successfully")
+		// -y overwrites, -i is input. FFmpeg handles the codec based on extension.
+		cmd := exec.Command("ffmpeg", "-y", "-i", inputPath, outputPath)
+
+		err = cmd.Run()
+		if err != nil {
+			fmt.Printf("FFmpeg Error: %v\n", err)
+			http.Error(w, "Conversion failed.", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"filename": "%s"}`, outputFilename)
+	})(w, r)
 }
+
+// ... (rest of main.go)
 
 func main() {
 	os.MkdirAll("temp", os.ModePerm)

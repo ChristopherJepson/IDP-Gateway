@@ -10,6 +10,28 @@ import (
 	"strings"
 )
 
+// NEW LOGIC: The Security Middleware
+func enableCORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// 1. Tell the browser: "I explicitly allow requests from any origin"
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		// 2. Tell the browser: "I allow these specific types of interactions"
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		// 3. The Preflight Check: Browsers send an invisible "OPTIONS" request first
+		// to test the waters. We just reply OK and stop here.
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		// 4. If it passes the security check, move on to the actual function!
+		next(w, r)
+	}
+}
+
 func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		http.Error(w, "Method not allowed.", http.StatusMethodNotAllowed)
@@ -33,7 +55,7 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 	outputPath := filepath.Join("temp", fileNameWithoutExt+".mp3")
 
 	fmt.Printf("Starting conversion for: %s...\n", header.Filename)
-	cmd := exec.Command("ffmpeg", "-y", "-i", inputPath, outputPath) // Added -y to automatically overwrite if file exists
+	cmd := exec.Command("ffmpeg", "-y", "-i", inputPath, outputPath)
 
 	err = cmd.Run()
 	if err != nil {
@@ -44,31 +66,26 @@ func uploadHandler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Success! Converted file saved to: %s\n", outputPath)
 
-	// NEW LOGIC: Send back a clickable HTML link instead of plain text
-	w.Header().Set("Content-Type", "text/html")
-	downloadURL := fmt.Sprintf("http://192.168.0.15:8080/download/%s.mp3", fileNameWithoutExt)
-
-	htmlResponse := fmt.Sprintf(`
-		<h2>Conversion Successful!</h2>
-		<p>Your file has been converted to MP3.</p>
-		<a href="%s" style="padding: 10px 20px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">Download %s.mp3</a>
-		<br><br>
-		<a href="javascript:history.back()">Convert another file</a>
-	`, downloadURL, fileNameWithoutExt)
-
-	fmt.Fprint(w, htmlResponse)
+	// Since we are talking to a React API now instead of a raw HTML page,
+	// we just need to send a simple success code back.
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "Converted successfully")
 }
 
 func main() {
 	os.MkdirAll("temp", os.ModePerm)
 
-	// NEW LOGIC: Create a file server that securely serves files from the "temp" directory
-	http.Handle("/download/", http.StripPrefix("/download/", http.FileServer(http.Dir("temp"))))
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// Wrap our existing endpoints in the new enableCORS middleware
+	http.HandleFunc("/", enableCORS(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "Your Go API Gateway is online!")
-	})
-	http.HandleFunc("/upload", uploadHandler)
+	}))
+
+	http.HandleFunc("/upload", enableCORS(uploadHandler))
+
+	// We handle the download folder slightly differently because it uses a built-in file server
+	http.Handle("/download/", http.StripPrefix("/download/", http.HandlerFunc(enableCORS(func(w http.ResponseWriter, r *http.Request) {
+		http.FileServer(http.Dir("temp")).ServeHTTP(w, r)
+	}))))
 
 	fmt.Println("Starting server on port 8080")
 	http.ListenAndServe(":8080", nil)

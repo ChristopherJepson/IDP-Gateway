@@ -143,6 +143,13 @@ func main() {
 
 	// We handle the download folder slightly differently because it uses a built-in file server
 	http.Handle("/download/", http.StripPrefix("/download/", http.HandlerFunc(enableCORS(func(w http.ResponseWriter, r *http.Request) {
+
+		// NEW: Extract the filename from the URL (e.g., "myvideo.mp4")
+		filename := filepath.Base(r.URL.Path)
+
+		// NEW: Force the browser to treat this as a file download, not a media stream
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+
 		http.FileServer(http.Dir("temp")).ServeHTTP(w, r)
 	}))))
 

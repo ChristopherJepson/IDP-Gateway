@@ -139,6 +139,7 @@ func main() {
 	}))
 
 	http.HandleFunc("/upload", enableCORS(uploadHandler))
+	http.HandleFunc("/upload-video", uploadVideoHandler)
 
 	// We handle the download folder slightly differently because it uses a built-in file server
 	http.Handle("/download/", http.StripPrefix("/download/", http.HandlerFunc(enableCORS(func(w http.ResponseWriter, r *http.Request) {

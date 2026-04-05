@@ -180,6 +180,47 @@ func getProjectHandler(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
+// Endpoint 3: Receives updated JSON from React and overwrites the file
+func saveProjectHandler(w http.ResponseWriter, r *http.Request) {
+	enableCORS(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		projectName := r.URL.Query().Get("name")
+		if projectName == "" {
+			http.Error(w, "Project name is required", http.StatusBadRequest)
+			return
+		}
+
+		// Secure the path
+		safePath := filepath.Clean(filepath.Join("data", projectName+".json"))
+		if !strings.HasPrefix(safePath, "data") {
+			http.Error(w, "Invalid project path", http.StatusForbidden)
+			return
+		}
+
+		// Read the JSON sent from React
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Error reading request body", http.StatusInternalServerError)
+			return
+		}
+		defer r.Body.Close()
+
+		// Overwrite the file on the Debian server
+		err = os.WriteFile(safePath, body, 0644)
+		if err != nil {
+			http.Error(w, "Error writing to file", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status": "success"}`))
+	})(w, r)
+}
+
 func main() {
 	os.MkdirAll("temp", os.ModePerm)
 	os.MkdirAll("data", os.ModePerm)
@@ -193,6 +234,7 @@ func main() {
 	http.HandleFunc("/upload-video", uploadVideoHandler)
 	http.HandleFunc("/api/projects", listProjectsHandler)
 	http.HandleFunc("/api/project", getProjectHandler)
+	http.HandleFunc("/api/project/save", saveProjectHandler)
 
 	// We handle the download folder slightly differently because it uses a built-in file server
 	http.Handle("/download/", http.StripPrefix("/download/", http.HandlerFunc(enableCORS(func(w http.ResponseWriter, r *http.Request) {

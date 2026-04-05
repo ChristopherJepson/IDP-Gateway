@@ -16,7 +16,7 @@ WORKDIR /app
 # We copy our Go module file and our main.go file from your Windows machine 
 # into the /app folder inside the Linux container.
 COPY go.mod ./
-COPY main.go ./
+COPY . .
 
 # 5. COMPILE THE APP
 # We tell Go to compile our raw code into a highly optimized, standalone executable 

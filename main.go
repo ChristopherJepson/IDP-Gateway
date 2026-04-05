@@ -182,6 +182,7 @@ func getProjectHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	os.MkdirAll("temp", os.ModePerm)
+	os.MkdirAll("data", os.ModePerm)
 
 	// Wrap our existing endpoints in the new enableCORS middleware
 	http.HandleFunc("/", enableCORS(func(w http.ResponseWriter, r *http.Request) {

@@ -130,6 +130,56 @@ func uploadVideoHandler(w http.ResponseWriter, r *http.Request) {
 	})(w, r)
 }
 
+// Endpoint 1: Scans the /data folder and returns a list of project filenames
+func listProjectsHandler(w http.ResponseWriter, r *http.Request) {
+	enableCORS(func(w http.ResponseWriter, r *http.Request) {
+		files, err := os.ReadDir("data")
+		if err != nil {
+			http.Error(w, "Could not read projects directory", http.StatusInternalServerError)
+			return
+		}
+
+		var projects []string
+		for _, file := range files {
+			if strings.HasSuffix(file.Name(), ".json") {
+				// Remove the .json extension for a cleaner name in the UI
+				projects = append(projects, strings.TrimSuffix(file.Name(), ".json"))
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		// Send the array of project names back to React
+		fmt.Fprintf(w, `{"projects": ["%s"]}`, strings.Join(projects, `", "`))
+	})(w, r)
+}
+
+// Endpoint 2: Fetches the specific JSON file for the selected project
+func getProjectHandler(w http.ResponseWriter, r *http.Request) {
+	enableCORS(func(w http.ResponseWriter, r *http.Request) {
+		projectName := r.URL.Query().Get("name")
+		if projectName == "" {
+			http.Error(w, "Project name is required", http.StatusBadRequest)
+			return
+		}
+
+		// Securely build the file path to prevent directory traversal attacks
+		safePath := filepath.Clean(filepath.Join("data", projectName+".json"))
+		if !strings.HasPrefix(safePath, "data") {
+			http.Error(w, "Invalid project path", http.StatusForbidden)
+			return
+		}
+
+		data, err := os.ReadFile(safePath)
+		if err != nil {
+			http.Error(w, "Project not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+	})(w, r)
+}
+
 func main() {
 	os.MkdirAll("temp", os.ModePerm)
 
@@ -140,6 +190,8 @@ func main() {
 
 	http.HandleFunc("/upload", enableCORS(uploadHandler))
 	http.HandleFunc("/upload-video", uploadVideoHandler)
+	http.HandleFunc("/api/projects", listProjectsHandler)
+	http.HandleFunc("/api/project", getProjectHandler)
 
 	// We handle the download folder slightly differently because it uses a built-in file server
 	http.Handle("/download/", http.StripPrefix("/download/", http.HandlerFunc(enableCORS(func(w http.ResponseWriter, r *http.Request) {

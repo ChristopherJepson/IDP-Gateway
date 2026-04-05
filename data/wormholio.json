@@ -1,0 +1,19 @@
+{
+  "projectName": "Wormholio",
+  "tasks": [
+    {
+      "id": "1.1",
+      "title": "Core Movement System",
+      "pipeline": "C++",
+      "status": "In Progress",
+      "raci": { "r": "Lead Programmer", "a": "Game Director", "c": "Animation Lead", "i": "Team" }
+    },
+    {
+      "id": "1.2",
+      "title": "Inventory UI",
+      "pipeline": "Blueprints",
+      "status": "Backlog",
+      "raci": { "r": "UI Scripter", "a": "Tech Lead", "c": "UI Artist", "i": "None" }
+    }
+  ]
+}
